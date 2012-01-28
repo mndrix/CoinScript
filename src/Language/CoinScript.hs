@@ -16,19 +16,19 @@ type Program = [Op]
 
 data Item = ItemInt Integer
     deriving (Show)
-data Stack = Stack
+data Machine = Machine
     { stack :: [Item]
     } deriving (Show)
-push :: Item -> State Stack ()
+push :: Item -> State Machine ()
 push i = do
-    (Stack s) <- get
-    put $ Stack (i:s)
-pop :: State Stack Item
+    (Machine s) <- get
+    put $ Machine (i:s)
+pop :: State Machine Item
 pop = do
-    (Stack (x:s)) <- get
-    put $ Stack s
+    (Machine (x:s)) <- get
+    put $ Machine s
     return x
-peek :: State Stack Item
+peek :: State Machine Item
 peek = do
     x <- pop
     push x
@@ -49,7 +49,7 @@ parse str = reverse $ go str []
             go rest ((OpInt $ read digits) : p)
     go (_:cs) p = go cs p
 
-runOp :: Op -> State Stack ()
+runOp :: Op -> State Machine ()
 runOp OpNoop = return ()
 runOp (OpInt i) = push (ItemInt i)
 runOp OpAdd = do
@@ -59,5 +59,5 @@ runOp OpAdd = do
 runOp OpDup = peek >>= push
 runOp OpDrop = pop >> return ()
 
-run :: Program -> Stack -> Stack
+run :: Program -> Machine -> Machine
 run p st = foldl (\s o -> execState (runOp o) s) st p
