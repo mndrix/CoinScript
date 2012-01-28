@@ -2,6 +2,7 @@ module Language.CoinScript
     (
     ) where
 
+import Control.Monad.State
 import Data.Char
 
 data Op = OpNoop
@@ -32,15 +33,20 @@ parse str = reverse $ go str []
             go rest ((OpInt $ read digits) : p)
     go (_:cs) p = go cs p
 
-runOp :: Op -> Stack -> Stack
-runOp OpNoop s = s
-runOp (OpInt i) s = ItemInt i : s
-runOp OpAdd (ItemInt x : ItemInt y : s) = ItemInt (x+y) : s
-runOp OpAdd _ = error "+ requires two integers on the stack"
-runOp OpDup s@(x:_) = x:s
-runOp OpDup _ = error "d requires something on the stack"
-runOp OpDrop (x:s) = s
-runOp OpDrop _ = error "D requires something on the stack"
+runOp :: Op -> State Stack ()
+runOp OpNoop = return ()
+runOp (OpInt i) = do
+    s <- get
+    put (ItemInt i:s)
+runOp OpAdd = do
+    (ItemInt x:ItemInt y:s) <- get
+    put (ItemInt (x+y):s)
+runOp OpDup = do
+    (x:s) <- get
+    put (x:x:s)
+runOp OpDrop = do
+    (_:s) <- get
+    put s
 
 run :: Program -> Stack -> Stack
-run p s = foldl (flip runOp) s p
+run p st = foldl (\s o -> execState (runOp o) s) st p
