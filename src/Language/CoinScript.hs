@@ -16,7 +16,23 @@ type Program = [Op]
 
 data Item = ItemInt Integer
     deriving (Show)
-type Stack = [Item]
+data Stack = Stack
+    { stack :: [Item]
+    } deriving (Show)
+push :: Item -> State Stack ()
+push i = do
+    (Stack s) <- get
+    put $ Stack (i:s)
+pop :: State Stack Item
+pop = do
+    (Stack (x:s)) <- get
+    put $ Stack s
+    return x
+peek :: State Stack Item
+peek = do
+    x <- pop
+    push x
+    return x
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -35,18 +51,13 @@ parse str = reverse $ go str []
 
 runOp :: Op -> State Stack ()
 runOp OpNoop = return ()
-runOp (OpInt i) = do
-    s <- get
-    put (ItemInt i:s)
+runOp (OpInt i) = push (ItemInt i)
 runOp OpAdd = do
-    (ItemInt x:ItemInt y:s) <- get
-    put (ItemInt (x+y):s)
-runOp OpDup = do
-    (x:s) <- get
-    put (x:x:s)
-runOp OpDrop = do
-    (_:s) <- get
-    put s
+    (ItemInt x) <- pop
+    (ItemInt y) <- pop
+    push $ ItemInt (x+y)
+runOp OpDup = peek >>= push
+runOp OpDrop = pop >> return ()
 
 run :: Program -> Stack -> Stack
 run p st = foldl (\s o -> execState (runOp o) s) st p
