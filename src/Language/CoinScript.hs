@@ -16,29 +16,35 @@ type Program = [Op]
 
 data Item = ItemInt Integer
     deriving (Show)
-data Machine = Machine
+
+-- describes functions applicable to all stack machines
+class Machine a where
+    push :: Item -> State a ()
+    pop :: State a Item
+    peek :: State a Item
+    peek = do
+        x <- pop
+        push x
+        return x
+    pushInteger :: Integer -> State a ()
+    popInteger :: State a Integer
+
+-- a stack machine for operating on data
+data DataMachine = DataMachine
     { stack :: [Item]
     } deriving (Show)
-push :: Item -> State Machine ()
-push i = do
-    (Machine s) <- get
-    put $ Machine (i:s)
-pop :: State Machine Item
-pop = do
-    (Machine (x:s)) <- get
-    put $ Machine s
-    return x
-peek :: State Machine Item
-peek = do
-    x <- pop
-    push x
-    return x
-pushInteger :: Integer -> State Machine ()
-pushInteger i = push (ItemInt i)
-popInteger :: State Machine Integer
-popInteger = do
-    (ItemInt i) <- pop
-    return i
+instance Machine DataMachine where
+    push i = do
+        (DataMachine s) <- get
+        put $ DataMachine (i:s)
+    pop = do
+        (DataMachine (x:s)) <- get
+        put $ DataMachine s
+        return x
+    pushInteger i = push (ItemInt i)
+    popInteger = do
+        (ItemInt i) <- pop
+        return i
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -55,7 +61,7 @@ parse str = reverse $ go str []
             go rest ((OpInt $ read digits) : p)
     go (_:cs) p = go cs p
 
-runOp :: Op -> State Machine ()
+runOp :: Machine a => Op -> State a ()
 runOp OpNoop = return ()
 runOp (OpInt i) = pushInteger i
 runOp OpAdd = do
@@ -65,5 +71,5 @@ runOp OpAdd = do
 runOp OpDup = peek >>= push
 runOp OpDrop = pop >> return ()
 
-run :: Program -> Machine -> Machine
+run :: Machine a => Program -> a -> a
 run p st = foldl (\s o -> execState (runOp o) s) st p
