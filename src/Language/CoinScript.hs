@@ -33,6 +33,12 @@ peek = do
     x <- pop
     push x
     return x
+pushInteger :: Integer -> State Machine ()
+pushInteger i = push (ItemInt i)
+popInteger :: State Machine Integer
+popInteger = do
+    (ItemInt i) <- pop
+    return i
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -51,11 +57,11 @@ parse str = reverse $ go str []
 
 runOp :: Op -> State Machine ()
 runOp OpNoop = return ()
-runOp (OpInt i) = push (ItemInt i)
+runOp (OpInt i) = pushInteger i
 runOp OpAdd = do
-    (ItemInt x) <- pop
-    (ItemInt y) <- pop
-    push $ ItemInt (x+y)
+    x <- popInteger
+    y <- popInteger
+    pushInteger $ x+y
 runOp OpDup = peek >>= push
 runOp OpDrop = pop >> return ()
 
