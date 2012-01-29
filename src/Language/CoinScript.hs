@@ -57,18 +57,28 @@ instance Machine DataMachine Item where
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
     { typeStack :: [Type]
+    , typeQueue :: [Type]
     } deriving (Show)
 instance Machine TypeMachine Type where
     push t = do
-        (TypeMachine s) <- get
-        put $ TypeMachine (t:s)
+        (TypeMachine s q) <- get
+        put $ TypeMachine (t:s) q
     pop = do
-        (TypeMachine (t:s)) <- get
-        put $ TypeMachine s
-        return t
+        (TypeMachine s q) <- get
+        case s of
+            [] -> do
+                put $ TypeMachine s (TypeUnknown:q)
+                return TypeUnknown
+            (t:ts) -> do
+                put $ TypeMachine ts q
+                return t
     pushInteger _ = push TypeInt
     popInteger = do
-        TypeInt <- pop
+        (TypeMachine s q) <- get
+        case s of
+            [] -> put $ TypeMachine s (TypeInt:q)
+            (TypeInt:ts) -> put $ TypeMachine ts q
+            (t:_) -> error $ "Expected TypeInt on stack, found " ++ show t
         return 1
 
 -- Parse script text into an executable program
