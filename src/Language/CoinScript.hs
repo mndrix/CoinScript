@@ -109,5 +109,8 @@ runOp OpAdd = do
 runOp OpDup = peek >>= push
 runOp OpDrop = pop >> return ()
 
-run :: Machine a b => Program -> a -> a
-run p st = foldl (\s o -> execState (runOp o) s) st p
+runProgram :: Machine a b => Program -> a -> a
+runProgram p st = foldl (\s o -> execState (runOp o) s) st p
+
+runScript :: Machine a b => String -> a -> a
+runScript = runProgram . parse
