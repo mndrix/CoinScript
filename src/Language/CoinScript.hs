@@ -27,6 +27,7 @@ data Type = TypeInt
 
 -- describes functions applicable to all stack machines
 class Machine a b | a -> b where
+    empty :: a
     push :: b -> State a ()
     pop :: State a b
     peek :: State a b
@@ -42,6 +43,7 @@ data DataMachine = DataMachine
     { itemStack :: [Item]
     } deriving (Show)
 instance Machine DataMachine Item where
+    empty = DataMachine []
     push i = do
         (DataMachine s) <- get
         put $ DataMachine (i:s)
@@ -60,6 +62,7 @@ data TypeMachine = TypeMachine
     , typeQueue :: [Type]
     } deriving (Show)
 instance Machine TypeMachine Type where
+    empty = TypeMachine [] []
     push t = do
         (TypeMachine s q) <- get
         put $ TypeMachine (t:s) q
