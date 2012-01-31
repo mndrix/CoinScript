@@ -6,6 +6,7 @@ module Language.CoinScript
 
 import Control.Monad.State
 import Data.Char
+import qualified Data.Text as T
 
 data Op = OpNoop
         | OpInt Integer
@@ -13,6 +14,7 @@ data Op = OpNoop
         | OpDup
         | OpDrop
         | OpTrue  | OpFalse
+        | OpString T.Text
     deriving (Show)
 
 type Program = [Op]
@@ -20,11 +22,13 @@ type Program = [Op]
 -- contents of a data stack
 data Item = ItemInt Integer
           | ItemBool Bool
+          | ItemString T.Text
     deriving (Show)
 
 -- contents of a type stack
 data Type = TypeInt
           | TypeBool
+          | TypeString
           | TypeUnknown
     deriving (Show)
 
@@ -41,6 +45,7 @@ class Machine a b | a -> b where
     pushInteger :: Integer -> State a ()
     popInteger :: State a Integer
     pushBoolean :: Bool -> State a ()
+    pushString :: T.Text -> State a ()
 
 -- a stack machine for operating on data
 data DataMachine = DataMachine
@@ -60,6 +65,7 @@ instance Machine DataMachine Item where
         (ItemInt i) <- pop
         return i
     pushBoolean = push . ItemBool
+    pushString = push . ItemString
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
@@ -89,6 +95,7 @@ instance Machine TypeMachine Type where
             (t:_) -> error $ "Expected TypeInt on stack, found " ++ show t
         return 1
     pushBoolean _ = push TypeBool
+    pushString _ = push TypeString
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -101,6 +108,9 @@ parse str = reverse $ go str []
     go ('D':cs) p = go cs (OpDrop:p)
     go ('t':cs) p = go cs (OpTrue:p)
     go ('f':cs) p = go cs (OpFalse:p)
+    go ('"':cs) p =
+        let (chars,(_:rest)) = span (/='"') cs in
+        go rest ((OpString $ T.pack chars):p)
     go s@(c:_)  p
         | isDigit c =
             let (digits,rest) = span isDigit s in
@@ -118,6 +128,7 @@ runOp OpDup = peek >>= push
 runOp OpDrop = pop >> return ()
 runOp OpTrue = pushBoolean True
 runOp OpFalse = pushBoolean False
+runOp (OpString s) = pushString s
 
 runProgram :: Machine a b => Program -> a -> a
 runProgram p st = foldl (\s o -> execState (runOp o) s) st p

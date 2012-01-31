@@ -34,4 +34,5 @@ Stack Operations
   * `t` - boolean true
   * `f` - boolean false
   * integer literals - pushed onto the stack
+  * `"foo"` - string literals
   * space - noop (useful for separating consecutive integers)
