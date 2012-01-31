@@ -15,6 +15,8 @@ data Op = OpNoop
         | OpDrop
         | OpTrue  | OpFalse
         | OpString T.Text
+        | OpEmptyList
+        | OpAppendList
     deriving (Show)
 
 type Program = [Op]
@@ -23,12 +25,14 @@ type Program = [Op]
 data Item = ItemInt Integer
           | ItemBool Bool
           | ItemString T.Text
+          | ItemList [Item]
     deriving (Show)
 
 -- contents of a type stack
 data Type = TypeInt
           | TypeBool
           | TypeString
+          | TypeList [Type]
           | TypeUnknown
     deriving (Show)
 
@@ -46,6 +50,8 @@ class Machine a b | a -> b where
     popInteger :: State a Integer
     pushBoolean :: Bool -> State a ()
     pushString :: T.Text -> State a ()
+    pushList :: [b] -> State a ()
+    popList :: State a [b]
 
 -- a stack machine for operating on data
 data DataMachine = DataMachine
@@ -66,6 +72,10 @@ instance Machine DataMachine Item where
         return i
     pushBoolean = push . ItemBool
     pushString = push . ItemString
+    pushList = push . ItemList
+    popList = do
+        (ItemList l) <- pop
+        return l
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
@@ -96,6 +106,17 @@ instance Machine TypeMachine Type where
         return 1
     pushBoolean _ = push TypeBool
     pushString _ = push TypeString
+    pushList = push . TypeList
+    popList = do
+        (TypeMachine s q) <- get
+        case s of
+            [] -> do
+                put $ TypeMachine s (TypeList []:q)
+                return []
+            (TypeList l:ts) -> do
+                put $ TypeMachine ts q
+                return l
+            (t:_) -> error $ "Expected TypeList on stack, found " ++ show t
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -108,6 +129,9 @@ parse str = reverse $ go str []
     go ('D':cs) p = go cs (OpDrop:p)
     go ('t':cs) p = go cs (OpTrue:p)
     go ('f':cs) p = go cs (OpFalse:p)
+    go ('(':cs) p = go cs (OpEmptyList:p)
+    go (',':cs) p = go cs (OpAppendList:p)
+    go (')':cs) p = go cs (OpNoop:p)
     go ('"':cs) p =
         let (chars,(_:rest)) = span (/='"') cs in
         go rest ((OpString $ T.pack chars):p)
@@ -129,6 +153,11 @@ runOp OpDrop = pop >> return ()
 runOp OpTrue = pushBoolean True
 runOp OpFalse = pushBoolean False
 runOp (OpString s) = pushString s
+runOp OpEmptyList = pushList []
+runOp OpAppendList = do
+    x <- pop
+    l <- popList
+    pushList $ l ++ [x]
 
 runProgram :: Machine a b => Program -> a -> a
 runProgram p st = foldl (\s o -> execState (runOp o) s) st p

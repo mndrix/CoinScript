@@ -36,6 +36,13 @@ To push consecutive numbers, separate them with a space: `1 2`.
 
 **Strings**: a string literal is enclosed in double quotes, `"like this"`.
 
+**Lists**: a list starts with `(` and ends with `)`.  Values inside
+the list are separated with `,`.  For non-empty lists, a trailing `,`
+is required.  For example, `(1,t,4 1+,)` pushes a list onto the stack
+containing 1, true and 5.  This works because `(` pushes an empty list
+onto the stack and `,` appends items onto it.  The same result could
+be accomplished with `()1,t,4 1+,`
+
 
 Stack Operations
 ----------------
@@ -43,4 +50,7 @@ Stack Operations
   * `+` - numeric addition
   * `d` - dup
   * `D` - drop
+  * `(` - push an empty list
+  * `,` - append an item to a list
+  * `)` - noop (required for balancing `(`)
   * space - noop (useful for separating consecutive integers)
