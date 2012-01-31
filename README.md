@@ -25,14 +25,22 @@ program on the "type machine" produces its type signature.
 The first implementation was 116 lines of Haskell.  That seems
 pretty decent for a language interpreter and type inference engine.
 
+Data Types
+----------
+
+**Boolean**: the operations `t` and `f` push a true or false value onto the
+stack, respectively.
+
+**Integers**: an integer literal like `1234` is pushed onto the stack as is.
+To push consecutive numbers, separate them with a space: `1 2`.
+
+**Strings**: a string literal is enclosed in double quotes, `"like this"`.
+
+
 Stack Operations
-================
+----------------
 
   * `+` - numeric addition
   * `d` - dup
   * `D` - drop
-  * `t` - boolean true
-  * `f` - boolean false
-  * `1234` - integer literal
-  * `"foo"` - string literal
   * space - noop (useful for separating consecutive integers)
