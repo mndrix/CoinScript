@@ -120,26 +120,29 @@ instance Machine TypeMachine Type where
 
 -- Parse script text into an executable program
 parse :: String -> Program
-parse str = reverse $ go str []
+parse str = reverse $ go str [] 0
   where
-    go []       p = p
-    go (' ':cs) p = go cs (OpNoop:p)
-    go ('+':cs) p = go cs (OpAdd:p)
-    go ('d':cs) p = go cs (OpDup:p)
-    go ('D':cs) p = go cs (OpDrop:p)
-    go ('t':cs) p = go cs (OpTrue:p)
-    go ('f':cs) p = go cs (OpFalse:p)
-    go ('(':cs) p = go cs (OpEmptyList:p)
-    go (',':cs) p = go cs (OpAppendList:p)
-    go (')':cs) p = go cs (OpNoop:p)
-    go ('"':cs) p =
+    go :: String -> Program -> Integer -> Program
+    go []       p 0 = p
+    go []       _ _ = error "Unbalanced parentheses"
+    go (' ':cs) p n = go cs (OpNoop:p) n
+    go ('+':cs) p n = go cs (OpAdd:p) n
+    go ('d':cs) p n = go cs (OpDup:p) n
+    go ('D':cs) p n = go cs (OpDrop:p) n
+    go ('t':cs) p n = go cs (OpTrue:p) n
+    go ('f':cs) p n = go cs (OpFalse:p) n
+    go ('(':cs) p n = go cs (OpEmptyList:p) (n+1)
+    go (',':cs) p n = go cs (OpAppendList:p) n
+    go (')':_ ) _ 0 = error "Closing paren without matching open paren"
+    go (')':cs) p n = go cs (OpNoop:p) (n-1)
+    go ('"':cs) p n =
         let (chars,(_:rest)) = span (/='"') cs in
-        go rest ((OpString $ T.pack chars):p)
-    go s@(c:_)  p
+        go rest ((OpString $ T.pack chars):p) n
+    go s@(c:_)  p n
         | isDigit c =
             let (digits,rest) = span isDigit s in
-            go rest ((OpInt $ read digits) : p)
-    go (_:cs) p = go cs p
+            go rest ((OpInt $ read digits) : p) n
+    go (_:cs) p n = go cs p n
 
 runOp :: Machine a b => Op -> State a ()
 runOp OpNoop = return ()
