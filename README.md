@@ -31,5 +31,7 @@ Stack Operations
   * `+` - numeric addition
   * `d` - dup
   * `D` - drop
+  * `t` - boolean true
+  * `f` - boolean false
   * integer literals - pushed onto the stack
   * space - noop (useful for separating consecutive integers)

@@ -12,16 +12,19 @@ data Op = OpNoop
         | OpAdd
         | OpDup
         | OpDrop
+        | OpTrue  | OpFalse
     deriving (Show)
 
 type Program = [Op]
 
 -- contents of a data stack
 data Item = ItemInt Integer
+          | ItemBool Bool
     deriving (Show)
 
 -- contents of a type stack
 data Type = TypeInt
+          | TypeBool
           | TypeUnknown
     deriving (Show)
 
@@ -37,6 +40,7 @@ class Machine a b | a -> b where
         return x
     pushInteger :: Integer -> State a ()
     popInteger :: State a Integer
+    pushBoolean :: Bool -> State a ()
 
 -- a stack machine for operating on data
 data DataMachine = DataMachine
@@ -55,6 +59,7 @@ instance Machine DataMachine Item where
     popInteger = do
         (ItemInt i) <- pop
         return i
+    pushBoolean = push . ItemBool
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
@@ -83,6 +88,7 @@ instance Machine TypeMachine Type where
             (TypeInt:ts) -> put $ TypeMachine ts q
             (t:_) -> error $ "Expected TypeInt on stack, found " ++ show t
         return 1
+    pushBoolean _ = push TypeBool
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -93,6 +99,8 @@ parse str = reverse $ go str []
     go ('+':cs) p = go cs (OpAdd:p)
     go ('d':cs) p = go cs (OpDup:p)
     go ('D':cs) p = go cs (OpDrop:p)
+    go ('t':cs) p = go cs (OpTrue:p)
+    go ('f':cs) p = go cs (OpFalse:p)
     go s@(c:_)  p
         | isDigit c =
             let (digits,rest) = span isDigit s in
@@ -108,6 +116,8 @@ runOp OpAdd = do
     pushInteger $ x+y
 runOp OpDup = peek >>= push
 runOp OpDrop = pop >> return ()
+runOp OpTrue = pushBoolean True
+runOp OpFalse = pushBoolean False
 
 runProgram :: Machine a b => Program -> a -> a
 runProgram p st = foldl (\s o -> execState (runOp o) s) st p
