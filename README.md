@@ -33,6 +33,6 @@ Stack Operations
   * `D` - drop
   * `t` - boolean true
   * `f` - boolean false
-  * integer literals - pushed onto the stack
-  * `"foo"` - string literals
+  * `1234` - integer literal
+  * `"foo"` - string literal
   * space - noop (useful for separating consecutive integers)
