@@ -120,10 +120,10 @@ instance Machine TypeMachine Type where
 
 -- Parse script text into an executable program
 parse :: String -> Program
-parse str = reverse $ go str [] 0
+parse str = reverse $ fst $ go str [] 0
   where
-    go :: String -> Program -> Integer -> Program
-    go []       p 0 = p
+    go :: String -> Program -> Integer -> (Program,String)
+    go []       p 0 = (p,[])
     go []       _ _ = error "Unbalanced parentheses"
     go (' ':cs) p n = go cs (OpNoop:p) n
     go ('+':cs) p n = go cs (OpAdd:p) n
