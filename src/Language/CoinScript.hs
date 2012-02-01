@@ -17,6 +17,7 @@ data Op = OpNoop
         | OpString T.Text
         | OpEmptyList
         | OpAppendList
+        | OpCode Program
     deriving (Show)
 
 type Program = [Op]
@@ -26,6 +27,7 @@ data Item = ItemInt Integer
           | ItemBool Bool
           | ItemString T.Text
           | ItemList [Item]
+          | ItemCode Program
     deriving (Show)
 
 -- contents of a type stack
@@ -33,6 +35,7 @@ data Type = TypeInt
           | TypeBool
           | TypeString
           | TypeList [Type]
+          | TypeCode [Type] [Type]
           | TypeUnknown
     deriving (Show)
 
@@ -52,6 +55,7 @@ class Machine a b | a -> b where
     pushString :: T.Text -> State a ()
     pushList :: [b] -> State a ()
     popList :: State a [b]
+    pushCode :: Program -> State a ()
 
 -- a stack machine for operating on data
 data DataMachine = DataMachine
@@ -76,6 +80,7 @@ instance Machine DataMachine Item where
     popList = do
         (ItemList l) <- pop
         return l
+    pushCode = push . ItemCode
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
@@ -117,6 +122,9 @@ instance Machine TypeMachine Type where
                 put $ TypeMachine ts q
                 return l
             (t:_) -> error $ "Expected TypeList on stack, found " ++ show t
+    pushCode p = do
+        let (consume,produce) = inferType p
+        push $ TypeCode consume produce
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -135,6 +143,11 @@ parse str = reverse $ fst $ go str [] 0
     go (',':cs) p n = go cs (OpAppendList:p) n
     go (')':_ ) _ 0 = error "Closing paren without matching open paren"
     go (')':cs) p n = go cs (OpNoop:p) (n-1)
+    go ('[':cs) p n =
+        let (program,rest) = go cs [] 0 in
+        go rest (OpCode (reverse program) : p) n
+    go (']':cs) p 0 = (p,cs)
+    go (']':_ ) _ _ = error "Unbalanced parentheses in code literal"
     go ('"':cs) p n =
         let (chars,(_:rest)) = span (/='"') cs in
         go rest ((OpString $ T.pack chars):p) n
@@ -161,9 +174,15 @@ runOp OpAppendList = do
     x <- pop
     l <- popList
     pushList $ l ++ [x]
+runOp (OpCode p) = pushCode p
 
 runProgram :: Machine a b => Program -> a -> a
 runProgram p st = foldl (\s o -> execState (runOp o) s) st p
 
 runScript :: Machine a b => String -> a -> a
 runScript = runProgram . parse
+
+inferType :: Program -> ([Type],[Type])
+inferType p = ( reverse $ typeQueue machine, typeStack machine )
+  where
+    machine = runProgram p (empty::TypeMachine)

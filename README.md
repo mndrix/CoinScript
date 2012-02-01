@@ -43,6 +43,10 @@ containing 1, true and 5.  This works because `(` pushes an empty list
 onto the stack and `,` appends items onto it.  The same result could
 be accomplished with `()1,t,4 1+,`
 
+**Code**: a code literal is bracketed by `[` and `]`.  The operations
+inside are not executed.  For example, `[1 2+]` pushes a code value
+onto the stack containing `1 2+`, *not* the integer 3.
+
 
 Stack Operations
 ----------------
