@@ -78,8 +78,9 @@ instance Machine DataMachine Item where
     codeStack = dmCodeStack
     setCodeStack m s = m{dmCodeStack=s}
     pop = do
-        (DataMachine (x:s) c) <- get  -- TODO use 'stack'
-        put $ DataMachine s c         -- TODO use 'setStack'
+        m <- get
+        let (x:s) = stack m
+        put $ setStack m s
         return x
     pushInteger i = push (ItemInt i)
     popInteger = do
@@ -106,33 +107,33 @@ instance Machine TypeMachine Type where
     codeStack = tmCodeStack
     setCodeStack m s = m{tmCodeStack=s}
     pop = do
-        (TypeMachine s q c) <- get  -- TODO use 'stack'
-        case s of
+        m <- get
+        case stack m of
             [] -> do
-                put $ TypeMachine s (TypeUnknown:q) c -- TODO use 'setStack'
+                put $ m{typeQueue=(TypeUnknown:typeQueue m)}
                 return TypeUnknown
             (t:ts) -> do
-                put $ TypeMachine ts q c      -- TODO use 'setStack'
+                put $ setStack m ts
                 return t
     pushInteger _ = push TypeInt
     popInteger = do
-        (TypeMachine s q c) <- get  -- TODO use 'stack'
-        case s of
-            [] -> put $ TypeMachine s (TypeInt:q) c -- TODO use 'setStack'
-            (TypeInt:ts) -> put $ TypeMachine ts q c -- TODO use 'setStack'
+        m <- get
+        case stack m of
+            [] -> put $ m{typeQueue=(TypeInt:typeQueue m)}
+            (TypeInt:ts) -> put $ setStack m ts
             (t:_) -> error $ "Expected TypeInt on stack, found " ++ show t
         return 1
     pushBoolean _ = push TypeBool
     pushString _ = push TypeString
     pushList = push . TypeList
     popList = do
-        (TypeMachine s q c) <- get
-        case s of
+        m <- get
+        case stack m of
             [] -> do
-                put $ TypeMachine s (TypeList []:q) c -- TODO use 'setStack'
+                put $ m{typeQueue=(TypeList []:typeQueue m)}
                 return []
             (TypeList l:ts) -> do
-                put $ TypeMachine ts q c -- TODO use 'setStack'
+                put $ setStack m ts
                 return l
             (t:_) -> error $ "Expected TypeList on stack, found " ++ show t
     pushCode p = do
