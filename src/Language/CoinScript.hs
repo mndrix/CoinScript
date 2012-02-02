@@ -49,6 +49,9 @@ class Machine a b | a -> b where
     isDone :: a -> Bool
     isDone = null . codeStack
     push :: b -> State a ()
+    push t = do
+        m <- get
+        put $ setStack m (t : stack m)
     pop :: State a b
     peek :: State a b
     peek = do
@@ -74,9 +77,6 @@ instance Machine DataMachine Item where
     setStack m s = m{dmStack=s}
     codeStack = dmCodeStack
     setCodeStack m s = m{dmCodeStack=s}
-    push i = do
-        (DataMachine s c) <- get  -- TODO use 'stack'
-        put $ DataMachine (i:s) c -- TODO use 'setStack'
     pop = do
         (DataMachine (x:s) c) <- get  -- TODO use 'stack'
         put $ DataMachine s c         -- TODO use 'setStack'
@@ -105,9 +105,6 @@ instance Machine TypeMachine Type where
     setStack m s = m{tmStack=s}
     codeStack = tmCodeStack
     setCodeStack m s = m{tmCodeStack=s}
-    push t = do
-        (TypeMachine s q c) <- get   -- TODO use 'stack'
-        put $ TypeMachine (t:s) q c -- TODO use 'setStack'
     pop = do
         (TypeMachine s q c) <- get  -- TODO use 'stack'
         case s of
