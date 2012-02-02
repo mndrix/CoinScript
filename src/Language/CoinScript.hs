@@ -41,7 +41,11 @@ data Type = TypeInt
 
 -- describes functions applicable to all stack machines
 class Machine a b | a -> b where
-    empty :: a
+    load :: Program -> a
+    codeStack :: a -> Program
+    setCodeStack :: a -> Program -> a
+    isDone :: a -> Bool
+    isDone = null . codeStack
     push :: b -> State a ()
     pop :: State a b
     peek :: State a b
@@ -60,15 +64,18 @@ class Machine a b | a -> b where
 -- a stack machine for operating on data
 data DataMachine = DataMachine
     { itemStack :: [Item]
+    , dmCodeStack :: Program
     } deriving (Show)
 instance Machine DataMachine Item where
-    empty = DataMachine []
+    load p = DataMachine [] p
+    codeStack = dmCodeStack
+    setCodeStack m s = m{dmCodeStack=s}
     push i = do
-        (DataMachine s) <- get
-        put $ DataMachine (i:s)
+        (DataMachine s c) <- get  -- TODO use 'stack'
+        put $ DataMachine (i:s) c -- TODO use 'setStack'
     pop = do
-        (DataMachine (x:s)) <- get
-        put $ DataMachine s
+        (DataMachine (x:s) c) <- get  -- TODO use 'stack'
+        put $ DataMachine s c         -- TODO use 'setStack'
         return x
     pushInteger i = push (ItemInt i)
     popInteger = do
@@ -86,40 +93,43 @@ instance Machine DataMachine Item where
 data TypeMachine = TypeMachine
     { typeStack :: [Type]
     , typeQueue :: [Type]
+    , tmCodeStack :: Program
     } deriving (Show)
 instance Machine TypeMachine Type where
-    empty = TypeMachine [] []
+    load p = TypeMachine [] [] p
+    codeStack = tmCodeStack
+    setCodeStack m s = m{tmCodeStack=s}
     push t = do
-        (TypeMachine s q) <- get
-        put $ TypeMachine (t:s) q
+        (TypeMachine s q c) <- get   -- TODO use 'stack'
+        put $ TypeMachine (t:s) q c -- TODO use 'setStack'
     pop = do
-        (TypeMachine s q) <- get
+        (TypeMachine s q c) <- get  -- TODO use 'stack'
         case s of
             [] -> do
-                put $ TypeMachine s (TypeUnknown:q)
+                put $ TypeMachine s (TypeUnknown:q) c -- TODO use 'setStack'
                 return TypeUnknown
             (t:ts) -> do
-                put $ TypeMachine ts q
+                put $ TypeMachine ts q c      -- TODO use 'setStack'
                 return t
     pushInteger _ = push TypeInt
     popInteger = do
-        (TypeMachine s q) <- get
+        (TypeMachine s q c) <- get  -- TODO use 'stack'
         case s of
-            [] -> put $ TypeMachine s (TypeInt:q)
-            (TypeInt:ts) -> put $ TypeMachine ts q
+            [] -> put $ TypeMachine s (TypeInt:q) c -- TODO use 'setStack'
+            (TypeInt:ts) -> put $ TypeMachine ts q c -- TODO use 'setStack'
             (t:_) -> error $ "Expected TypeInt on stack, found " ++ show t
         return 1
     pushBoolean _ = push TypeBool
     pushString _ = push TypeString
     pushList = push . TypeList
     popList = do
-        (TypeMachine s q) <- get
+        (TypeMachine s q c) <- get
         case s of
             [] -> do
-                put $ TypeMachine s (TypeList []:q)
+                put $ TypeMachine s (TypeList []:q) c -- TODO use 'setStack'
                 return []
             (TypeList l:ts) -> do
-                put $ TypeMachine ts q
+                put $ TypeMachine ts q c -- TODO use 'setStack'
                 return l
             (t:_) -> error $ "Expected TypeList on stack, found " ++ show t
     pushCode p = do
@@ -176,13 +186,21 @@ runOp OpAppendList = do
     pushList $ l ++ [x]
 runOp (OpCode p) = pushCode p
 
-runProgram :: Machine a b => Program -> a -> a
-runProgram p st = foldl (\s o -> execState (runOp o) s) st p
+-- run the machine through its next operation
+step :: Machine a b => a -> a
+step = execState $ do
+    m <- get
+    let (op:program) = codeStack m
+    put $ setCodeStack m program
+    runOp op
 
-runScript :: Machine a b => String -> a -> a
+runProgram :: Machine a b => Program -> a
+runProgram = until isDone step . load
+
+runScript :: Machine a b => String -> a
 runScript = runProgram . parse
 
 inferType :: Program -> ([Type],[Type])
 inferType p = ( reverse $ typeQueue machine, typeStack machine )
   where
-    machine = runProgram p (empty::TypeMachine)
+    machine = runProgram p
