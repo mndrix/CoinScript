@@ -82,7 +82,7 @@ instance Machine DataMachine Item where
         let (x:s) = stack m
         put $ setStack m s
         return x
-    pushInteger i = push (ItemInt i)
+    pushInteger = push . ItemInt
     popInteger = do
         (ItemInt i) <- pop
         return i
