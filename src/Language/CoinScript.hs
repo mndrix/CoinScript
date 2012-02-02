@@ -42,6 +42,8 @@ data Type = TypeInt
 -- describes functions applicable to all stack machines
 class Machine a b | a -> b where
     load :: Program -> a
+    stack :: a -> [b]
+    setStack :: a -> [b] -> a
     codeStack :: a -> Program
     setCodeStack :: a -> Program -> a
     isDone :: a -> Bool
@@ -63,11 +65,13 @@ class Machine a b | a -> b where
 
 -- a stack machine for operating on data
 data DataMachine = DataMachine
-    { itemStack :: [Item]
+    { dmStack :: [Item]
     , dmCodeStack :: Program
     } deriving (Show)
 instance Machine DataMachine Item where
     load p = DataMachine [] p
+    stack = dmStack
+    setStack m s = m{dmStack=s}
     codeStack = dmCodeStack
     setCodeStack m s = m{dmCodeStack=s}
     push i = do
@@ -91,12 +95,14 @@ instance Machine DataMachine Item where
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
-    { typeStack :: [Type]
+    { tmStack :: [Type]
     , typeQueue :: [Type]
     , tmCodeStack :: Program
     } deriving (Show)
 instance Machine TypeMachine Type where
     load p = TypeMachine [] [] p
+    stack = tmStack
+    setStack m s = m{tmStack=s}
     codeStack = tmCodeStack
     setCodeStack m s = m{tmCodeStack=s}
     push t = do
@@ -201,6 +207,6 @@ runScript :: Machine a b => String -> a
 runScript = runProgram . parse
 
 inferType :: Program -> ([Type],[Type])
-inferType p = ( reverse $ typeQueue machine, typeStack machine )
+inferType p = ( reverse $ typeQueue machine, stack machine )
   where
     machine = runProgram p
