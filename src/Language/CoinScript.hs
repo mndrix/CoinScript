@@ -289,8 +289,11 @@ step = execState $ do
     runOp op
     postOp
 
+runMachine :: Machine a b => a -> a
+runMachine = until isDone step
+
 runProgram :: Machine a b => Program -> a
-runProgram = until isDone step . load
+runProgram = runMachine . load
 
 runScript :: Machine a b => String -> a
 runScript = runProgram . parse
