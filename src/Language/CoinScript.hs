@@ -118,7 +118,7 @@ instance Machine TypeMachine Type where
         m <- get
         case stack m of
             [] -> do
-                put $ m{typeQueue=(TypeUnknown:typeQueue m)}
+                enqueue TypeUnknown
                 return TypeUnknown
             (t:ts) -> do
                 put $ setStack m ts
@@ -127,7 +127,7 @@ instance Machine TypeMachine Type where
     popInteger = do
         m <- get
         case stack m of
-            [] -> put $ m{typeQueue=(TypeInt:typeQueue m)}
+            [] -> enqueue TypeInt
             (TypeInt:ts) -> put $ setStack m ts
             (t:_) -> error $ "Expected TypeInt on stack, found " ++ show t
         return 1
@@ -138,7 +138,7 @@ instance Machine TypeMachine Type where
         m <- get
         case stack m of
             [] -> do
-                put $ m{typeQueue=(TypeList []:typeQueue m)}
+                enqueue $ TypeList []
                 return []
             (TypeList l:ts) -> do
                 put $ setStack m ts
@@ -150,11 +150,17 @@ instance Machine TypeMachine Type where
     runCode = do
         m <- get
         case stack m of
-            [] -> put $ m{typeQueue=(TypeCode [] [] : typeQueue m)}
+            [] -> enqueue $ TypeCode [] []
             (TypeCode c p:s) -> do
                 put $ setStack m s
                 consumeProduce c p
             (t:_) -> error $ "Expected TypeCode, found " ++ show t
+
+-- helper for TypeMachine. Adds a value to the type queue
+enqueue :: Type -> State TypeMachine ()
+enqueue t = do
+    m <- get
+    put $ m{typeQueue=(t : typeQueue m)}
 
 -- helper for TypeMachine's runCode implementation
 -- consumes the first list of types from the stack and then produces
@@ -166,7 +172,7 @@ consumeProduce (c:cs) ps = do
     m <- get
     case stack m of
         [] -> do
-            put $ m{typeQueue=(c:typeQueue m)}
+            enqueue c
             consumeProduce cs ps
         (x:_) ->
             if c == x
