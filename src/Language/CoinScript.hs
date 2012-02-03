@@ -43,7 +43,12 @@ data Type = TypeInt
 
 -- describes functions applicable to all stack machines
 class Machine a b | a -> b where
-    load :: Program -> a
+    empty :: a
+    load :: Program -> State a ()
+    load p = do
+        m <- get
+        let c = codeStack m
+        put $ setCodeStack m (p ++ c)
     stack :: a -> [b]
     setStack :: a -> [b] -> a
     codeStack :: a -> Program
@@ -77,7 +82,7 @@ data DataMachine = DataMachine
     , dmCodeStack :: Program
     } deriving (Show)
 instance Machine DataMachine Item where
-    load p = DataMachine [] p
+    empty = DataMachine [] []
     stack = dmStack
     setStack m s = m{dmStack=s}
     codeStack = dmCodeStack
@@ -113,7 +118,7 @@ data TypeMachine = TypeMachine
     , tmResolvedTypes :: M.Map Int Type  -- how to resolve type variables
     } deriving (Show)
 instance Machine TypeMachine Type where
-    load p = TypeMachine [] [] p 1 M.empty
+    empty = TypeMachine [] [] [] 1 M.empty
     stack = tmStack
     setStack m s = m{tmStack=s}
     codeStack = tmCodeStack
@@ -293,7 +298,7 @@ runMachine :: Machine a b => a -> a
 runMachine = until isDone step
 
 runProgram :: Machine a b => Program -> a
-runProgram = runMachine . load
+runProgram p = runMachine $ execState (load p) empty
 
 runScript :: Machine a b => String -> a
 runScript = runProgram . parse
