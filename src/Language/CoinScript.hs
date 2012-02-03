@@ -37,7 +37,7 @@ data Type = TypeInt
           | TypeString
           | TypeList [Type]
           | TypeCode [Type] [Type]
-          | TypeUnknown
+          | TypeVar Int
     deriving (Eq,Show)
 
 -- describes functions applicable to all stack machines
@@ -107,9 +107,10 @@ data TypeMachine = TypeMachine
     { tmStack :: [Type]
     , typeQueue :: [Type]
     , tmCodeStack :: Program
+    , tmNextTypeVar :: Int
     } deriving (Show)
 instance Machine TypeMachine Type where
-    load p = TypeMachine [] [] p
+    load p = TypeMachine [] [] p 1
     stack = tmStack
     setStack m s = m{tmStack=s}
     codeStack = tmCodeStack
@@ -118,8 +119,9 @@ instance Machine TypeMachine Type where
         m <- get
         case stack m of
             [] -> do
-                enqueue TypeUnknown
-                return TypeUnknown
+                t <- nextTypeVar
+                enqueue t
+                return t
             (t:ts) -> do
                 put $ setStack m ts
                 return t
@@ -178,6 +180,13 @@ consumeProduce (c:cs) ps = do
             if c == x
                 then pop >> consumeProduce cs ps
                 else error $ "Expected " ++ show c ++ ", found " ++ show x
+
+nextTypeVar :: State TypeMachine Type
+nextTypeVar = do
+    m <- get
+    let n = tmNextTypeVar m
+    put $ m{tmNextTypeVar=(n+1)}
+    return $ TypeVar n
 
 -- Parse script text into an executable program
 parse :: String -> Program
