@@ -106,8 +106,8 @@ instance Machine DataMachine Item where
     runCode = do
         m <- get
         let (ItemCode c:s) = stack m
-        let p = codeStack m
-        put $ setStack (setCodeStack m (c ++ p)) s
+        put $ setStack m s
+        load c
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
