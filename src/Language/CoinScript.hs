@@ -24,6 +24,14 @@ data Op = OpNoop
 
 type Program = [Op]
 
+data Status = Ok
+            | Fail String
+    deriving (Show)
+
+isFail :: Status -> Bool
+isFail (Fail _) = True
+isFail _ = False
+
 -- contents of a data stack
 data Item = ItemInt Integer
           | ItemBool Bool
@@ -48,8 +56,10 @@ class Machine a b | a -> b where
     setStack :: a -> [b] -> a
     codeStack :: a -> Program
     setCodeStack :: a -> Program -> a
+    status :: a -> Status
+    setStatus :: a -> Status -> a
     isDone :: a -> Bool
-    isDone = null . codeStack
+    isDone m = any ($m) [ null . codeStack, isFail . status ]
     push :: b -> State a ()
     push t = do
         m <- get
@@ -75,34 +85,44 @@ class Machine a b | a -> b where
 data DataMachine = DataMachine
     { dmStack :: [Item]
     , dmCodeStack :: Program
+    , dmStatus :: Status
     } deriving (Show)
 instance Machine DataMachine Item where
-    empty = DataMachine [] []
+    empty = DataMachine [] [] Ok
     stack = dmStack
     setStack m s = m{dmStack=s}
     codeStack = dmCodeStack
     setCodeStack m s = m{dmCodeStack=s}
+    status = dmStatus
+    setStatus m s = m{dmStatus=s}
     pop = do
         m <- get
-        let (x:s) = stack m
-        put $ setStack m s
-        return x
+        case stack m of
+            [] -> underflow
+            (x:s) -> (put $ setStack m s) >> return x
     pushInteger = push . ItemInt
     popInteger = do
-        (ItemInt i) <- pop
-        return i
+        x <- pop
+        case x of
+            ItemInt i -> return i
+            t -> expected (ItemInt 1) t >> return 1
     pushBoolean = push . ItemBool
     pushString = push . ItemString
     pushList = push . ItemList
     popList = do
-        (ItemList l) <- pop
-        return l
+        x <- pop
+        case x of
+            ItemList l -> return l
+            t -> expected (ItemList []) t >> return []
     pushCode = push . ItemCode
     runCode = do
         m <- get
         let (ItemCode c:s) = stack m
         let p = codeStack m
         put $ setStack (setCodeStack m (c ++ p)) s
+
+underflow :: State DataMachine a
+underflow = error "Stack underflow"
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
@@ -111,13 +131,16 @@ data TypeMachine = TypeMachine
     , tmCodeStack :: Program
     , tmNextTypeVar :: Int
     , tmResolvedTypes :: M.Map Int Type  -- how to resolve type variables
+    , tmStatus :: Status
     } deriving (Show)
 instance Machine TypeMachine Type where
-    empty = TypeMachine [] [] [] 1 M.empty
+    empty = TypeMachine [] [] [] 1 M.empty Ok
     stack = tmStack
     setStack m s = m{tmStack=s}
     codeStack = tmCodeStack
     setCodeStack m s = m{tmCodeStack=s}
+    status = tmStatus
+    setStatus m s = m{tmStatus=s}
     pop = do
         m <- get
         case stack m of
@@ -155,7 +178,7 @@ instance Machine TypeMachine Type where
                 put $ setStack m ts
                 resolveType n (TypeList [])
                 return []
-            (t:_) -> expected (TypeList []) t
+            (t:_) -> expected (TypeList []) t >> return []
     pushCode p = do
         let (consume,produce) = inferType p
         push $ TypeCode consume produce
@@ -225,8 +248,11 @@ replaceTypes m (TypeVar n:xs) =
 replaceTypes m (TypeList l:xs) = TypeList (replaceTypes m l) : replaceTypes m xs
 replaceTypes m (x:xs) = x : replaceTypes m xs
 
-expected :: Type -> Type -> a
-expected e f = error $ "Expected " ++ show e ++ ", found " ++ show f
+expected :: (Show b, Machine a b) => b -> b -> State a ()
+expected e f = do
+    m <- get
+    let msg = "Expected " ++ show e ++ ", found " ++ show f
+    put $ setStatus m (Fail msg)
 
 -- Parse script text into an executable program
 parse :: String -> Program
