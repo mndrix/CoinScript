@@ -131,6 +131,9 @@ instance Machine TypeMachine Type where
         case stack m of
             [] -> enqueue TypeInt
             (TypeInt:ts) -> put $ setStack m ts
+            (TypeVar n:ts) -> do
+                put $ setStack m ts
+                replaceTypes (TypeVar n) TypeInt
             (t:_) -> error $ "Expected TypeInt on stack, found " ++ show t
         return 1
     pushBoolean _ = push TypeBool
@@ -145,6 +148,10 @@ instance Machine TypeMachine Type where
             (TypeList l:ts) -> do
                 put $ setStack m ts
                 return l
+            (TypeVar n:ts) -> do
+                put $ setStack m ts
+                replaceTypes (TypeVar n) (TypeList [])
+                return []
             (t:_) -> error $ "Expected TypeList on stack, found " ++ show t
     pushCode p = do
         let (consume,produce) = inferType p
@@ -187,6 +194,23 @@ nextTypeVar = do
     let n = tmNextTypeVar m
     put $ m{tmNextTypeVar=(n+1)}
     return $ TypeVar n
+
+replaceTypes :: Type -> Type -> State TypeMachine ()
+replaceTypes o n = do
+    m <- get
+    let s = replaceType o n $ stack m
+    let q = replaceType o n $ typeQueue m
+    put $ (setStack m s){typeQueue=q}
+
+replaceType :: Type -> Type -> [Type] -> [Type]
+replaceType _ _ [] = []
+replaceType x y (z:xs) =
+    ( if x == z
+        then y
+        else case z of
+                (TypeList z') -> TypeList $ replaceType x y z'
+                _ -> z
+    ) : replaceType x y xs
 
 -- Parse script text into an executable program
 parse :: String -> Program
