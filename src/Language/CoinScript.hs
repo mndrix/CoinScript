@@ -6,6 +6,7 @@ module Language.CoinScript
 
 import Control.Monad.State
 import Data.Char
+import qualified Data.Map as M
 import qualified Data.Text as T
 
 data Op = OpNoop
@@ -67,6 +68,8 @@ class Machine a b | a -> b where
     popList :: State a [b]
     pushCode :: Program -> State a ()
     runCode :: State a ()
+    postOp :: State a () -- hook for after op execution
+    postOp = return ()
 
 -- a stack machine for operating on data
 data DataMachine = DataMachine
@@ -100,7 +103,6 @@ instance Machine DataMachine Item where
         let (ItemCode c:s) = stack m
         let p = codeStack m
         put $ setStack (setCodeStack m (c ++ p)) s
-        
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
@@ -108,9 +110,10 @@ data TypeMachine = TypeMachine
     , typeQueue :: [Type]
     , tmCodeStack :: Program
     , tmNextTypeVar :: Int
+    , tmResolvedTypes :: M.Map Int Type  -- how to resolve type variables
     } deriving (Show)
 instance Machine TypeMachine Type where
-    load p = TypeMachine [] [] p 1
+    load p = TypeMachine [] [] p 1 M.empty
     stack = tmStack
     setStack m s = m{tmStack=s}
     codeStack = tmCodeStack
@@ -133,7 +136,7 @@ instance Machine TypeMachine Type where
             (TypeInt:ts) -> put $ setStack m ts
             (TypeVar n:ts) -> do
                 put $ setStack m ts
-                replaceTypes (TypeVar n) TypeInt
+                resolveType n TypeInt
             (t:_) -> error $ "Expected TypeInt on stack, found " ++ show t
         return 1
     pushBoolean _ = push TypeBool
@@ -150,7 +153,7 @@ instance Machine TypeMachine Type where
                 return l
             (TypeVar n:ts) -> do
                 put $ setStack m ts
-                replaceTypes (TypeVar n) (TypeList [])
+                resolveType n (TypeList [])
                 return []
             (t:_) -> error $ "Expected TypeList on stack, found " ++ show t
     pushCode p = do
@@ -164,6 +167,7 @@ instance Machine TypeMachine Type where
                 put $ setStack m s
                 consumeProduce c p
             (t:_) -> error $ "Expected TypeCode, found " ++ show t
+    postOp = resolveTypes
 
 -- helper for TypeMachine. Adds a value to the type queue
 enqueue :: Type -> State TypeMachine ()
@@ -195,22 +199,31 @@ nextTypeVar = do
     put $ m{tmNextTypeVar=(n+1)}
     return $ TypeVar n
 
-replaceTypes :: Type -> Type -> State TypeMachine ()
-replaceTypes o n = do
+resolveType :: Int -> Type -> State TypeMachine ()
+resolveType n t = do
     m <- get
-    let s = replaceType o n $ stack m
-    let q = replaceType o n $ typeQueue m
-    put $ (setStack m s){typeQueue=q}
+    let rts = tmResolvedTypes m
+    case M.lookup n rts  of
+        Nothing -> put $ m{tmResolvedTypes=M.insert n t rts}
+        Just t' -> when (t/=t') (error $ "Expected " ++ show t' ++ ", found " ++ show t)
 
-replaceType :: Type -> Type -> [Type] -> [Type]
-replaceType _ _ [] = []
-replaceType x y (z:xs) =
-    ( if x == z
-        then y
-        else case z of
-                (TypeList z') -> TypeList $ replaceType x y z'
-                _ -> z
-    ) : replaceType x y xs
+resolveTypes :: State TypeMachine ()
+resolveTypes = do
+    m <- get
+    let rts = tmResolvedTypes m
+    when (not $ M.null rts) $ do
+        let s = replaceTypes rts $ stack m
+        let q = replaceTypes rts $ typeQueue m
+        put $ (setStack m s){typeQueue=q,tmResolvedTypes=M.empty}
+
+replaceTypes :: M.Map Int Type -> [Type] -> [Type]
+replaceTypes _ [] = []
+replaceTypes m (TypeVar n:xs) =
+    case M.lookup n m of
+        Nothing -> TypeVar n : replaceTypes m xs
+        Just t  -> t : replaceTypes m xs
+replaceTypes m (TypeList l:xs) = TypeList (replaceTypes m l) : replaceTypes m xs
+replaceTypes m (x:xs) = x : replaceTypes m xs
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -271,6 +284,7 @@ step = execState $ do
     let (op:program) = codeStack m
     put $ setCodeStack m program
     runOp op
+    postOp
 
 runProgram :: Machine a b => Program -> a
 runProgram = until isDone step . load
