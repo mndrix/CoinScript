@@ -137,7 +137,7 @@ instance Machine TypeMachine Type where
             (TypeVar n:ts) -> do
                 put $ setStack m ts
                 resolveType n TypeInt
-            (t:_) -> error $ "Expected TypeInt on stack, found " ++ show t
+            (t:_) -> expected TypeInt t
         return 1
     pushBoolean _ = push TypeBool
     pushString _ = push TypeString
@@ -155,7 +155,7 @@ instance Machine TypeMachine Type where
                 put $ setStack m ts
                 resolveType n (TypeList [])
                 return []
-            (t:_) -> error $ "Expected TypeList on stack, found " ++ show t
+            (t:_) -> expected (TypeList []) t
     pushCode p = do
         let (consume,produce) = inferType p
         push $ TypeCode consume produce
@@ -166,7 +166,7 @@ instance Machine TypeMachine Type where
             (TypeCode c p:s) -> do
                 put $ setStack m s
                 consumeProduce c p
-            (t:_) -> error $ "Expected TypeCode, found " ++ show t
+            (t:_) -> expected (TypeCode [] []) t
     postOp = resolveTypes
 
 -- helper for TypeMachine. Adds a value to the type queue
@@ -190,7 +190,7 @@ consumeProduce (c:cs) ps = do
         (x:_) ->
             if c == x
                 then pop >> consumeProduce cs ps
-                else error $ "Expected " ++ show c ++ ", found " ++ show x
+                else expected c x
 
 nextTypeVar :: State TypeMachine Type
 nextTypeVar = do
@@ -205,7 +205,7 @@ resolveType n t = do
     let rts = tmResolvedTypes m
     case M.lookup n rts  of
         Nothing -> put $ m{tmResolvedTypes=M.insert n t rts}
-        Just t' -> when (t/=t') (error $ "Expected " ++ show t' ++ ", found " ++ show t)
+        Just t' -> when (t/=t') (expected t' t)
 
 resolveTypes :: State TypeMachine ()
 resolveTypes = do
@@ -224,6 +224,9 @@ replaceTypes m (TypeVar n:xs) =
         Just t  -> t : replaceTypes m xs
 replaceTypes m (TypeList l:xs) = TypeList (replaceTypes m l) : replaceTypes m xs
 replaceTypes m (x:xs) = x : replaceTypes m xs
+
+expected :: Type -> Type -> a
+expected e f = error $ "Expected " ++ show e ++ ", found " ++ show f
 
 -- Parse script text into an executable program
 parse :: String -> Program
