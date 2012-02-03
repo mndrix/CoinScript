@@ -18,6 +18,7 @@ data Op = OpNoop
         | OpEmptyList
         | OpAppendList
         | OpCode Program
+        | OpExecute
     deriving (Show)
 
 type Program = [Op]
@@ -37,7 +38,7 @@ data Type = TypeInt
           | TypeList [Type]
           | TypeCode [Type] [Type]
           | TypeUnknown
-    deriving (Show)
+    deriving (Eq,Show)
 
 -- describes functions applicable to all stack machines
 class Machine a b | a -> b where
@@ -65,6 +66,7 @@ class Machine a b | a -> b where
     pushList :: [b] -> State a ()
     popList :: State a [b]
     pushCode :: Program -> State a ()
+    runCode :: State a ()
 
 -- a stack machine for operating on data
 data DataMachine = DataMachine
@@ -93,6 +95,12 @@ instance Machine DataMachine Item where
         (ItemList l) <- pop
         return l
     pushCode = push . ItemCode
+    runCode = do
+        m <- get
+        let (ItemCode c:s) = stack m
+        let p = codeStack m
+        put $ setStack (setCodeStack m (c ++ p)) s
+        
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
@@ -139,6 +147,31 @@ instance Machine TypeMachine Type where
     pushCode p = do
         let (consume,produce) = inferType p
         push $ TypeCode consume produce
+    runCode = do
+        m <- get
+        case stack m of
+            [] -> put $ m{typeQueue=(TypeCode [] [] : typeQueue m)}
+            (TypeCode c p:s) -> do
+                put $ setStack m s
+                consumeProduce c p
+            (t:_) -> error $ "Expected TypeCode, found " ++ show t
+
+-- helper for TypeMachine's runCode implementation
+-- consumes the first list of types from the stack and then produces
+-- the second list of types onto the stack
+consumeProduce :: [Type] -> [Type] -> State TypeMachine ()
+consumeProduce [] [] = return ()
+consumeProduce [] (p:ps) = push p >> consumeProduce [] ps
+consumeProduce (c:cs) ps = do
+    m <- get
+    case stack m of
+        [] -> do
+            put $ m{typeQueue=(c:typeQueue m)}
+            consumeProduce cs ps
+        (x:_) ->
+            if c == x
+                then pop >> consumeProduce cs ps
+                else error $ "Expected " ++ show c ++ ", found " ++ show x
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -153,6 +186,7 @@ parse str = reverse $ fst $ go str [] 0
     go ('D':cs) p n = go cs (OpDrop:p) n
     go ('t':cs) p n = go cs (OpTrue:p) n
     go ('f':cs) p n = go cs (OpFalse:p) n
+    go ('!':cs) p n = go cs (OpExecute:p) n
     go ('(':cs) p n = go cs (OpEmptyList:p) (n+1)
     go (',':cs) p n = go cs (OpAppendList:p) n
     go (')':_ ) _ 0 = error "Closing paren without matching open paren"
@@ -189,6 +223,7 @@ runOp OpAppendList = do
     l <- popList
     pushList $ l ++ [x]
 runOp (OpCode p) = pushCode p
+runOp OpExecute = runCode
 
 -- run the machine through its next operation
 step :: Machine a b => a -> a

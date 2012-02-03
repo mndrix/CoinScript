@@ -45,7 +45,8 @@ be accomplished with `()1,t,4 1+,`
 
 **Code**: a code literal is bracketed by `[` and `]`.  The operations
 inside are not executed.  For example, `[1 2+]` pushes a code value
-onto the stack containing `1 2+`, *not* the integer 3.
+onto the stack containing `1 2+`, *not* the integer 3.  To execute a
+code value, use `!`.
 
 
 Stack Operations
@@ -57,4 +58,5 @@ Stack Operations
   * `(` - push an empty list
   * `,` - append an item to a list
   * `)` - noop (required for balancing `(`)
+  * `!` - execute code literal on top of the stack
   * space - noop (useful for separating consecutive integers)
