@@ -126,7 +126,7 @@ instance Machine DataMachine Item where
         put $ setStack (setCodeStack m (c ++ p)) s
 
 underflow :: StateE DataMachine a
-underflow = error "Stack underflow"
+underflow = fail "Stack underflow"
 
 -- a stack machine for operating on types
 data TypeMachine = TypeMachine
@@ -253,10 +253,7 @@ replaceTypes m (TypeList l:xs) = TypeList (replaceTypes m l) : replaceTypes m xs
 replaceTypes m (x:xs) = x : replaceTypes m xs
 
 expected :: (Show b, Machine a b) => b -> b -> StateE a ()
-expected e f = do
-    m <- get
-    let msg = "Expected " ++ show e ++ ", found " ++ show f
-    put $ setStatus m (Fail msg)
+expected e f = fail $ "Expected " ++ show e ++ ", found " ++ show f
 
 -- Parse script text into an executable program
 parse :: String -> Program
@@ -310,14 +307,23 @@ runOp OpAppendList = do
 runOp (OpCode p) = pushCode p
 runOp OpExecute = runCode
 
--- run the machine through its next operation
-step :: Machine a b => a -> a
-step = execState $ runErrorT $ do
+tryStep :: Machine a b => a -> (Either String (), a)
+tryStep = runState $ runErrorT $ do
     m <- get
     let (op:program) = codeStack m
     put $ setCodeStack m program
     runOp op
     postOp
+
+-- run the machine through its next operation
+step :: Machine a b => a -> a
+step x =
+    case tryStep x of
+        (Right _,m) -> m
+        (Left msg, m) -> execState (runErrorT $ failed msg) m
+  where
+    failed :: Machine a b => String -> StateE a ()
+    failed msg = modify (\m -> setStatus m $ Fail msg)
 
 runMachine :: Machine a b => a -> a
 runMachine = until isDone step
