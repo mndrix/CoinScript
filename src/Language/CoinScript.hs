@@ -5,9 +5,13 @@ module Language.CoinScript
     ) where
 
 import Control.Monad.State
+import Control.Monad.Error
 import Data.Char
 import qualified Data.Map as M
 import qualified Data.Text as T
+
+-- custom State monad that handles failure
+type StateE a = ErrorT String (State a)
 
 data Op = OpNoop
         | OpInt Integer
@@ -60,25 +64,25 @@ class Machine a b | a -> b where
     setStatus :: a -> Status -> a
     isDone :: a -> Bool
     isDone m = any ($m) [ null . codeStack, isFail . status ]
-    push :: b -> State a ()
+    push :: b -> StateE a ()
     push t = do
         m <- get
         put $ setStack m (t : stack m)
-    pop :: State a b
-    peek :: State a b
+    pop :: StateE a b
+    peek :: StateE a b
     peek = do
         x <- pop
         push x
         return x
-    pushInteger :: Integer -> State a ()
-    popInteger :: State a Integer
-    pushBoolean :: Bool -> State a ()
-    pushString :: T.Text -> State a ()
-    pushList :: [b] -> State a ()
-    popList :: State a [b]
-    pushCode :: Program -> State a ()
-    runCode :: State a ()
-    postOp :: State a () -- hook for after op execution
+    pushInteger :: Integer -> StateE a ()
+    popInteger :: StateE a Integer
+    pushBoolean :: Bool -> StateE a ()
+    pushString :: T.Text -> StateE a ()
+    pushList :: [b] -> StateE a ()
+    popList :: StateE a [b]
+    pushCode :: Program -> StateE a ()
+    runCode :: StateE a ()
+    postOp :: StateE a () -- hook for after op execution
     postOp = return ()
 
 -- a stack machine for operating on data
@@ -121,7 +125,7 @@ instance Machine DataMachine Item where
         let p = codeStack m
         put $ setStack (setCodeStack m (c ++ p)) s
 
-underflow :: State DataMachine a
+underflow :: StateE DataMachine a
 underflow = error "Stack underflow"
 
 -- a stack machine for operating on types
@@ -193,7 +197,7 @@ instance Machine TypeMachine Type where
     postOp = resolveTypes
 
 -- helper for TypeMachine. Adds a value to the type queue
-enqueue :: Type -> State TypeMachine ()
+enqueue :: Type -> StateE TypeMachine ()
 enqueue t = do
     m <- get
     put $ m{typeQueue=(t : typeQueue m)}
@@ -201,7 +205,7 @@ enqueue t = do
 -- helper for TypeMachine's runCode implementation
 -- consumes the first list of types from the stack and then produces
 -- the second list of types onto the stack
-consumeProduce :: [Type] -> [Type] -> State TypeMachine ()
+consumeProduce :: [Type] -> [Type] -> StateE TypeMachine ()
 consumeProduce [] [] = return ()
 consumeProduce [] (p:ps) = push p >> consumeProduce [] ps
 consumeProduce (c:cs) ps = do
@@ -215,14 +219,14 @@ consumeProduce (c:cs) ps = do
                 then pop >> consumeProduce cs ps
                 else expected c x
 
-nextTypeVar :: State TypeMachine Type
+nextTypeVar :: StateE TypeMachine Type
 nextTypeVar = do
     m <- get
     let n = tmNextTypeVar m
     put $ m{tmNextTypeVar=(n+1)}
     return $ TypeVar n
 
-resolveType :: Int -> Type -> State TypeMachine ()
+resolveType :: Int -> Type -> StateE TypeMachine ()
 resolveType n t = do
     m <- get
     let rts = tmResolvedTypes m
@@ -230,7 +234,7 @@ resolveType n t = do
         Nothing -> put $ m{tmResolvedTypes=M.insert n t rts}
         Just t' -> when (t/=t') (expected t' t)
 
-resolveTypes :: State TypeMachine ()
+resolveTypes :: StateE TypeMachine ()
 resolveTypes = do
     m <- get
     let rts = tmResolvedTypes m
@@ -248,7 +252,7 @@ replaceTypes m (TypeVar n:xs) =
 replaceTypes m (TypeList l:xs) = TypeList (replaceTypes m l) : replaceTypes m xs
 replaceTypes m (x:xs) = x : replaceTypes m xs
 
-expected :: (Show b, Machine a b) => b -> b -> State a ()
+expected :: (Show b, Machine a b) => b -> b -> StateE a ()
 expected e f = do
     m <- get
     let msg = "Expected " ++ show e ++ ", found " ++ show f
@@ -286,7 +290,7 @@ parse str = reverse $ fst $ go str [] 0
             go rest ((OpInt $ read digits) : p) n
     go (_:cs) p n = go cs p n
 
-runOp :: Machine a b => Op -> State a ()
+runOp :: Machine a b => Op -> StateE a ()
 runOp OpNoop = return ()
 runOp (OpInt i) = pushInteger i
 runOp OpAdd = do
@@ -308,7 +312,7 @@ runOp OpExecute = runCode
 
 -- run the machine through its next operation
 step :: Machine a b => a -> a
-step = execState $ do
+step = execState $ runErrorT $ do
     m <- get
     let (op:program) = codeStack m
     put $ setCodeStack m program
