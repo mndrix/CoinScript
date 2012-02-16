@@ -38,10 +38,11 @@ To push consecutive numbers, separate them with a space: `1 2`.
 
 **Lists**: a list starts with `(` and ends with `)`.  Values inside
 the list are separated with `,`.  For non-empty lists, a trailing `,`
-is required.  For example, `(1,t,4 1+,)` pushes a list onto the stack
-containing 1, true and 5.  This works because `(` pushes an empty list
+is required.  For example, `(1,2,4 1+,)` pushes a list onto the stack
+containing 1, 2 and 5.  This works because `(` pushes an empty list
 onto the stack and `,` appends items onto it.  The same result could
-be accomplished with `()1,t,4 1+,`
+be accomplished with `()1,2,4 1+,`.  All values in a list should be of
+the same type.
 
 **Code**: a code literal is bracketed by `[` and `]`.  The operations
 inside are not executed.  For example, `[1 2+]` pushes a code value
